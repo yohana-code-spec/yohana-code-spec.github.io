@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Salto del Ninja</title>
+<style>
+  body {
+    margin: 0;
+    background: linear-gradient(to top, #0f2027, #203a43, #2c5364);
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: white;
+  }
+  canvas {
+    background: #112233;
+    border: 3px solid #61dafb;
+    border-radius: 8px;
+    display: block;
+  }
+  #score {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1.8rem;
+    font-weight: bold;
+    text-shadow: 1px 1px 4px #000;
+  }
+  #instructions {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #ccc;
+    font-size: 1rem;
+    user-select: none;
+  }
+</style>
+</head>
+<body>
+<div id="score">Puntuación: 0</div>
+<div id="instructions">Presiona ESPACIO o CLIC para saltar</div>
+<canvas id="game" width="480" height="320"></canvas>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+
+  const gravity = 0.6;
+  const jumpPower = 12;
+  const platformSpeed = 2;
+  const platformWidthMin = 80;
+  const platformWidthMax = 160;
+  const platformHeight = 15;
+  const ninjaSize = 40;
+
+  let score = 0;
+  let gameOver = false;
+
+  class Ninja {
+    constructor() {
+      this.width = ninjaSize;
+      this.height = ninjaSize;
+      this.x = 60;
+      this.y = canvas.height - platformHeight - this.height;
+      this.velY = 0;
+      this.jumping = false;
+      this.color = '#61dafb';
+    }
+
+    draw() {
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(this.x + this.width/2, this.y + this.height/2, this.width/2, 0, Math.PI * 2);
+      ctx.fill();
+      // Eyes
+      ctx.fillStyle = '#222';
+      ctx.beginPath();
+      ctx.arc(this.x + this.width/3, this.y + this.height/3, 5, 0, Math.PI * 2);
+      ctx.arc(this.x + 2*this.width/3, this.y + this.height/3, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    update() {
+      this.velY += gravity;
+      this.y += this.velY;
+
+      if (this.y + this.height > canvas.height) {
+        this.y = canvas.height - this.height;
+        this.velY = 0;
+        this.jumping = false;
+        gameOver = true;
+      }
+    }
+
+    jump() {
+      if (!this.jumping) {
+        this.velY = -jumpPower;
+        this.jumping = true;
+      }
+    }
+  }
+
+  class Platform {
+    constructor(x, width) {
+      this.x = x;
+      this.y = canvas.height - platformHeight;
+      this.width = width;
+      this.height = platformHeight;
+      this.color = '#28a745';
+    }
+
+    draw() {
+      ctx.fillStyle = this.color;
+      ctx.fillRect(this.x, this.y, this.width, this.height);
+    }
+
+    update() {
+      this.x -= platformSpeed;
+    }
+  }
+
+  let ninja = new Ninja();
+  let platforms = [];
+
+  function addPlatform() {
+    const lastPlatform = platforms.length ? platforms[platforms.length -1] : null;
+    let newX = lastPlatform ? lastPlatform.x + lastPlatform.width + Math.random()*100 + 40 : 0;
+    let newWidth = Math.random() * (platformWidthMax - platformWidthMin) + platformWidthMin;
+    platforms.push(new Platform(newX, newWidth));
+  }
+
+  // Crear plataforma inicial
+  platforms.push(new Platform(0, 150));
+  for(let i=0; i<4; i++) addPlatform();
+
+  function detectCollision(ninja, platform) {
+    // Simple AABB collision between ninja and platform
+    return (
+      ninja.x < platform.x + platform.width &&
+      ninja.x + ninja.width > platform.x &&
+      ninja.y + ninja.height > platform.y &&
+      ninja.y + ninja.height < platform.y + platform.height + 15 && // Ajuste de margen
+      ninja.velY >= 0
+    );
+  }
+
+  function updateScore() {
+    score++;
+    document.getElementById('score').textContent = 'Puntuación: ' + score;
+  }
+
+  function resetGame() {
+    ninja = new Ninja();
+    platforms = [new Platform(0, 150)];
+    for(let i=0; i<4; i++) addPlatform();
+    score = 0;
+    gameOver = false;
+    updateScore();
+    loop();
+  }
+
+  function loop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if(gameOver) {
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#fff';
+      ctx.font = '30px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('¡Game Over!', canvas.width/2, canvas.height/2 - 20);
+      ctx.font = '20px Arial';
+      ctx.fillText('Presiona R para reiniciar', canvas.width/2, canvas.height/2 + 20);
+      return;
+    }
+
+    ninja.update();
+
+    // Comprobar colisiones y ajustar salto
+    let onPlatform = false;
+    platforms.forEach(platform => {
+      platform.update();
+      platform.draw();
+
+      if (detectCollision(ninja, platform)) {
+        ninja.y = platform.y - ninja.height;
+        ninja.velY = 0;
+        ninja.jumping = false;
+        onPlatform = true;
+      }
+    });
+
+    // Remover plataformas fuera de pantalla y añadir nuevas
+    if(platforms.length && platforms[0].x + platforms[0].width < 0) {
+      platforms.shift();
+      addPlatform();
+      if(!gameOver) updateScore();
+    }
+
+    ninja.draw();
+
+    requestAnimationFrame(loop);
+  }
+
+  window.addEventListener('keydown', e => {
+    if(e.code === 'Space') {
+      if(gameOver) resetGame();
+      else ninja.jump();
+    }
+    if(e.code === 'KeyR' && gameOver) {
+      resetGame();
+    }
+  });
+
+  canvas.addEventListener('mousedown', () => {
+    if(gameOver) resetGame();
+    else ninja.jump();
+  });
+
+  loop();
+
+})();
+</script>
+</body>
+</html>
